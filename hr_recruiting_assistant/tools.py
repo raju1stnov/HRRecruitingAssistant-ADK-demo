@@ -1,44 +1,35 @@
-"""
-ADK tool wrappers that forward JSON‑RPC 2.0 calls to the live
-platform services running in platform‑setup_repo.
-"""
-
-import os, json, requests
-from google.adk.tools import tool
+import os, requests
+from google.adk.tools import FunctionTool  # 👈 new
 
 AUTH_URL = os.getenv("AUTH_AGENT_URL", "http://auth_agent:8000/a2a")
 WEB_URL  = os.getenv("WEBSERVICE_AGENT_URL", "http://webservice_agent:8000/a2a")
 DB_URL   = os.getenv("DBSERVICE_AGENT_URL", "http://dbservice_agent:8000/a2a")
 
-def _json_rpc(url: str, method: str, params: dict, rpc_id: int = 1):
-    payload = {"jsonrpc": "2.0", "id": rpc_id, "method": method, "params": params}
-    r = requests.post(url, json=payload, timeout=15)
-    r.raise_for_status()
-    data = r.json()
+def _rpc(url, method, params):
+    payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    data = requests.post(url, json=payload, timeout=15).json()
     if "error" in data:
-        raise RuntimeError(f"{url} returned error: {data['error']}")
-    return data.get("result")
+        raise RuntimeError(data["error"])
+    return data["result"]
 
-# ---------------- ADK tools ----------------
-@tool
+@FunctionTool                 # 👈 instead of @tool
 def login_user(username: str, password: str) -> str:
-    """Authenticate the user via auth_agent. Returns a JWT token on success."""
-    result = _json_rpc(AUTH_URL, "login", {"username": username, "password": password})
-    if result.get("success"):
-        return result["token"]
-    raise RuntimeError(result.get("error", "login failed"))
+    """Authenticate via auth_agent and return JWT token."""
+    res = _rpc(AUTH_URL, "login", {"username": username, "password": password})
+    if not res.get("success"):
+        raise RuntimeError(res.get("error", "login failed"))
+    return res["token"]
 
-@tool
+@FunctionTool
 def search_for_candidates(title: str, skills: str) -> list:
-    """Search for candidates using webservice_agent."""
-    return _json_rpc(WEB_URL, "search_candidates",
-                     {"title": title, "skills": skills})
+    """Search candidates via webservice_agent."""
+    return _rpc(WEB_URL, "search_candidates", {"title": title, "skills": skills})
 
-@tool
+@FunctionTool
 def save_candidate_record(name: str, title: str, skills: list) -> str:
-    """Save a candidate record in dbservice_agent and return status."""
-    out = _json_rpc(DB_URL, "create_record",
-                    {"name": name, "title": title, "skills": skills})
-    if out.get("status") != "saved":
-        raise RuntimeError(out.get("error", "save failed"))
+    """Persist candidate via dbservice_agent."""
+    res = _rpc(DB_URL, "create_record",
+               {"name": name, "title": title, "skills": skills})
+    if res.get("status") != "saved":
+        raise RuntimeError(res.get("error", "save failed"))
     return f"Candidate '{name}' saved."

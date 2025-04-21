@@ -1,5 +1,5 @@
 from google.adk.agents import LlmAgent
-from . import prompts, tools
+from . import tools, prompts
 
 root_agent = LlmAgent(
     name="hr_recruiting_assistant",
@@ -8,6 +8,6 @@ root_agent = LlmAgent(
     tools=[
         tools.login_user,
         tools.search_for_candidates,
-        tools.save_candidate_record,
+        tools.save_candidate_record
     ],
 )
