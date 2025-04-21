@@ -1,19 +1,14 @@
+# HRRecruitingAssistant-ADK-demo/app/schemas.py
+
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
-# --- Input Schema for the Agent's Main Intent ---
+# --- Input Schema for the Agent's API Endpoint (if used) ---
 class RecruitingWorkflowInput(BaseModel):
     username: str = Field(..., description="Username for authentication")
     password: str = Field(..., description="Password for authentication (secret)")
     title: str = Field(..., description="Job title to search for candidates")
     skills: str = Field(..., description="Comma-separated string of required skills for candidates")
-
-# --- Schema for JSON-RPC A2A Calls (if agent needs to receive them) ---
-class JSONRPCRequest(BaseModel):
-    jsonrpc: str = Field(..., description="JSON-RPC version, must be '2.0'")
-    method: str = Field(..., description="The name of the method to be invoked")
-    params: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Parameters for the method")
-    id: Optional[int | str] = Field(None, description="Request identifier")
 
 # --- Tool Input/Output Schemas ---
 
@@ -31,8 +26,6 @@ class LoginOutput(BaseModel):
 class SearchInput(BaseModel):
     title: str = Field(..., description="Job title to search for")
     skills: str = Field(..., description="Comma-separated string of required skills")
-    # Note: The token is managed internally by the agent logic, not passed directly into this schema by the LLM usually.
-    # It will be retrieved from the agent's state/context after login.
 
 class CandidateSchema(BaseModel):
     # Mirrors the expected structure from webcrawler_agent -> webservice_agent
@@ -58,9 +51,16 @@ class SaveCandidateOutput(BaseModel):
     name: Optional[str] = Field(None, description="Name of saved candidate")
     error: Optional[str] = Field(None, description="Error message on failure")
 
-# --- Agent's Final Output Schema ---
+# --- Agent's API Output Schema (if API endpoint is used) ---
 class RecruitingWorkflowOutput(BaseModel):
     message: str = Field(..., description="Summary message of the workflow execution")
     saved_candidates_count: int = Field(..., description="Number of candidates successfully saved")
     found_candidates_count: int = Field(..., description="Number of candidates initially found")
     errors: List[str] = Field(default_factory=list, description="List of errors encountered during the process")
+
+# --- Schema for JSON-RPC A2A Calls (Needed by main.py /a2a endpoint) ---
+class JSONRPCRequest(BaseModel):
+    jsonrpc: str = Field(..., description="JSON-RPC version, must be '2.0'")
+    method: str = Field(..., description="The name of the method to be invoked")
+    params: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Parameters for the method")
+    id: Optional[int | str] = Field(None, description="Request identifier")
