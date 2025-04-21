@@ -1,31 +1,44 @@
 version: "3.9"
-
 services:
-  hr_recruiting_assistant_adk:
-    build: .
-    container_name: hr_recruiting_assistant_adk
-    ports:
-      # Map container port 8006 to host port 8006 (or choose another host port)
-      - "8007:8007"
-    networks:
-      # Connect to the existing network used by the platform services
-      - agents_net
+  db:
+    image: postgres:15
+    container_name: hr_assistant_db
     environment:
-      # Pass necessary environment variables (URLs, GCP config)
-      # These will override defaults in config.py if set
-      - AUTH_AGENT_URL=http://auth_agent:8000/a2a
-      - WEBSERVICE_AGENT_URL=http://webservice_agent:8000/a2a
-      - DBSERVICE_AGENT_URL=http://dbservice_agent:8000/a2a
-      # Add GCP_PROJECT_ID, GCP_LOCATION etc. if needed for ADK authentication/operation
-      # - GCP_PROJECT_ID=your-gcp-project-id
-      # - GCP_LOCATION=us-central1
-      # Make sure the container has credentials (e.g., via mounted service account key or Workload Identity)
-    # Optional: Mount GCP credentials if using a service account key file
-    # volumes:
-    #   - /path/to/your/gcp-key.json:/app/gcp-key.json:ro
-    #   - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-key.json
+      POSTGRES_DB: adk_hr_db
+      POSTGRES_USER: adk_user
+      POSTGRES_PASSWORD: adk_password
+    ports:
+      - "5433:5432"  # Host port 5433 -> Container's Postgres 5432 (avoid local conflict)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adk_user -d adk_hr_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-networks:
-  agents_net:
-    # This network must already exist (created by the platform-setup_repo docker-compose)
-    external: true
+  app:
+    build:
+      context: .
+    container_name: hr_assistant_app
+    ports:
+      - "8007:8007"  # Host port 8001 -> Agent service (includes Web UI at /dev-ui)
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      # Mount source code for hot-reloading (optional in development)
+      - ./hr_recruiting_assistant:/app/hr_recruiting_assistant
+      - ./api.py:/app/api.py
+      # Mount Google Cloud credentials for model access (read-only)
+      - type: bind
+        source: ${APPDATA:-~/.config}/gcloud
+        target: /root/.config/gcloud
+        read_only: true
+    stdin_open: true   # Keep STDIN open (needed if using uvicorn reload)
+    tty: true          # Allocate a pseudo-TTY (needed for uvicorn reload)
+
+volumes:
+  postgres_data:
