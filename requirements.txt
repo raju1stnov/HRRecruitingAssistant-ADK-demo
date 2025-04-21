@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+google-cloud-aiplatform[agents] # Installs ADK and necessary Vertex AI libraries
+google-api-python-client # Might be needed depending on auth setup
+python-dotenv # Optional, for local .env file support
