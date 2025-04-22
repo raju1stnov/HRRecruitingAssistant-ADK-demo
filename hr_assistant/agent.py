@@ -1,13 +1,14 @@
-# HRRecruitingAssistant-ADK-demo/app/agent.py
+# HRRecruitingAssistant-ADK-demo/hr_assistant/agent.py
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any # Keep these standard imports
 
 # ADK imports - Use the correct package 'google_adk'
 from google_adk.agents import Agent, ToolConfig, ChatAgent
 
+# Relative imports within the 'hr_assistant' package
 from . import config
-from .tools import hr_tools # Tools defined in tools.py
+from .tools import hr_tools # Import the list of tools
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ Maintain a polite and professional tone throughout the conversation. Only ask fo
 """
 
 # Create the Agent instance
-# Ensure this instance is discoverable by `adk web` (defining it at module level usually works)
+# This instance variable 'hr_agent' is what 'adk web' should discover inside this file.
 # Make sure GCP_PROJECT_ID and GCP_LOCATION are set in your environment or .env file
 # if your ADK setup requires them for authentication/operation.
 hr_agent = ChatAgent(
@@ -53,4 +54,4 @@ hr_agent = ChatAgent(
     location=config.GCP_LOCATION,  # Pass project/location if needed by ADK
 )
 
-# The API-specific workflow function 'run_hr_workflow' is removed as it's not used for 'adk web'.
+logger.info(f"ChatAgent instance 'hr_agent' created in agent.py. Project: {config.GCP_PROJECT_ID}, Location: {config.GCP_LOCATION}, Model: {config.AGENT_MODEL_NAME}")

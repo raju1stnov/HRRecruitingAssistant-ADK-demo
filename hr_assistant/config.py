@@ -1,4 +1,4 @@
-# HRRecruitingAssistant-ADK-demo/app/config.py
+# HRRecruitingAssistant-ADK-demo/hr_assistant/config.py
 import os
 from dotenv import load_dotenv
 
