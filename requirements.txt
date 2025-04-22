@@ -1,7 +1,8 @@
+# HRRecruitingAssistant-ADK-demo/requirements.txt
 fastapi
 uvicorn[standard]
 pydantic
 httpx
-google-cloud-aiplatform[agents] # Installs ADK and necessary Vertex AI libraries
-google-api-python-client # Might be needed depending on auth setup
+google-adk # Use the correct ADK package
+# google-api-python-client # Keep if needed for GCP auth, often included with ADK/Vertex
 python-dotenv # Optional, for local .env file support

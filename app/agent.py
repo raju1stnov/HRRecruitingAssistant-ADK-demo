@@ -3,22 +3,20 @@
 import logging
 from typing import List, Dict, Any
 
-# ADK imports - adjust based on final package structure
-from google.cloud.aiplatform.preview.agents import Agent, ToolConfig, ChatAgent
+# ADK imports - Use the correct package 'google_adk'
+from google_adk.agents import Agent, ToolConfig, ChatAgent
 
 from . import config
-from .tools import hr_tools # Tools defined in tools.py remain the same
-# Schemas are used by tools, but the main input comes via chat now
-# from .schemas import RecruitingWorkflowInput, RecruitingWorkflowOutput
+from .tools import hr_tools # Tools defined in tools.py
 
 logger = logging.getLogger(__name__)
 
 # --- Agent Definition ---
 
-# Configure the tools for the agent (remains the same)
+# Configure the tools for the agent
 tool_config = ToolConfig(tool_list=hr_tools)
 
-# --- *** NEW: Updated Agent Instructions for Conversational UI *** ---
+# Agent Instructions for Conversational UI (Keep as provided)
 AGENT_UI_INSTRUCTIONS = """
 You are an HR Recruiting Assistant designed to work via chat. Your goal is to automate finding and saving candidate profiles.
 
@@ -45,67 +43,14 @@ Maintain a polite and professional tone throughout the conversation. Only ask fo
 
 # Create the Agent instance
 # Ensure this instance is discoverable by `adk web` (defining it at module level usually works)
+# Make sure GCP_PROJECT_ID and GCP_LOCATION are set in your environment or .env file
+# if your ADK setup requires them for authentication/operation.
 hr_agent = ChatAgent(
     model=config.AGENT_MODEL_NAME,
     tool_config=tool_config,
-    instructions=AGENT_UI_INSTRUCTIONS, # Use the new instructions
-    # project=config.GCP_PROJECT_ID,   # Uncomment if needed for auth
-    # location=config.GCP_LOCATION,  # Uncomment if needed for auth
+    instructions=AGENT_UI_INSTRUCTIONS,
+    project=config.GCP_PROJECT_ID,   # Pass project/location if needed by ADK
+    location=config.GCP_LOCATION,  # Pass project/location if needed by ADK
 )
 
-# --- API-Specific Workflow Function (Commented Out/Optional) ---
-# This function was designed for the API endpoint (/run_workflow in main.py)
-# which receives all input at once. It's not directly used by the
-# conversational UI (`adk web`). The UI interaction follows the AGENT_UI_INSTRUCTIONS above.
-# You can keep this function if you want the API endpoint in main.py to still
-# function separately, but ensure it handles potential state/context correctly
-# if ADK manages state across different interaction types. For simplicity in focusing
-# on the UI, we comment it out here. If kept, it would need careful testing alongside UI usage.
-
-# from .schemas import RecruitingWorkflowInput, RecruitingWorkflowOutput # Need these if function is active
-# async def run_hr_workflow(input_data: RecruitingWorkflowInput) -> RecruitingWorkflowOutput:
-#     """
-#     Invokes the ADK agent to perform the recruiting workflow via API.
-#     (This function is NOT used by the `adk web` UI interaction by default)
-#     """
-#     logger.info(f"Starting HR Workflow via API for user: {input_data.username}, title: {input_data.title}")
-#     user_query = (
-#         f"Please start the recruiting workflow. "
-#         f"Username: {input_data.username}, Password: [REDACTED], "
-#         f"Job Title: {input_data.title}, Required Skills: {input_data.skills}. "
-#         f"Use the provided password for login."
-#     )
-#     try:
-#         chat = hr_agent.start_chat()
-#         # Pass input for context if needed by ADK version/implementation
-#         response = await chat.send_message_async(user_query, **input_data.dict())
-#         final_message = response.content
-#         logger.info(f"Agent final response content via API: {final_message}")
-#         # Placeholder parsing logic - NEEDS REFINEMENT based on actual LLM output
-#         saved_count = 0
-#         found_count = 0
-#         errors_list = []
-#         # TODO: Implement robust parsing of final_message to extract counts and errors.
-#         if "saved" in final_message.lower():
-#              import re
-#              saved_match = re.search(r"(\d+)\s+candidates?\s+saved", final_message, re.IGNORECASE)
-#              found_match = re.search(r"(\d+)\s+candidates?\s+found", final_message, re.IGNORECASE)
-#              if saved_match: saved_count = int(saved_match.group(1))
-#              if found_match: found_count = int(found_match.group(1))
-#         if "error" in final_message.lower():
-#             errors_list.append("Errors occurred during the workflow. Check agent logs or full response.")
-
-#         return RecruitingWorkflowOutput(
-#             message=final_message,
-#             saved_candidates_count=saved_count,
-#             found_candidates_count=found_count,
-#             errors=errors_list
-#         )
-#     except Exception as e:
-#         logger.exception(f"Error invoking ADK agent workflow via API: {e}")
-#         return RecruitingWorkflowOutput(
-#             message=f"Workflow failed: {e}",
-#             saved_candidates_count=0,
-#             found_candidates_count=0,
-#             errors=[f"Critical agent error: {e}"]
-#         )
+# The API-specific workflow function 'run_hr_workflow' is removed as it's not used for 'adk web'.
