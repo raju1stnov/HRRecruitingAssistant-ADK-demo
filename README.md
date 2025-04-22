@@ -16,6 +16,24 @@ We have developed an AI agent, the "HR Recruiting Assistant," designed to stream
 
 This allows HR professionals to trigger the entire process with a single request and receive a summary of the results, significantly saving time and effort.
 
+```mermaid
+flowchart TD
+
+user[HR User via SDK - ADK Web UI] --> agent[Agent: hr_recruiting_assistant]
+
+agent -->|login_user| auth_agent[auth_agent]
+auth_agent --> fake_auth_service[fake_auth_service]
+
+agent -->|search_for_candidates| webservice_agent[webservice_agent]
+webservice_agent --> webcrawler_agent[webcrawler_agent]
+
+agent -->|save_candidate_record| dbservice_agent[dbservice_agent]
+
+classDef jsonrpc fill:#e8f0fe,stroke:#1a73e8;
+class auth_agent,webservice_agent,dbservice_agent,fake_auth_service,webcrawler_agent jsonrpc;
+
+```
+
 ## 3. Technology Used: Google Agent Development Kit (ADK)
 
 This assistant is built using the  **Google Agent Development Kit (ADK)** .
@@ -47,8 +65,6 @@ Using ADK allows us to build a more intelligent and potentially adaptable HR ass
 * Add more complex decision-making (e.g., only save candidates with > N years experience).
 * Incorporate more tools (e.g., sending email summaries).
 * Potentially interact using natural language in the future.
-
-
 
 ## Comparison: ADK vs. LangGraph Approach
 
