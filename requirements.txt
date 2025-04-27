@@ -1,8 +1,5 @@
-# HRRecruitingAssistant-ADK-demo/requirements.txt
-fastapi
-uvicorn[standard]
-pydantic
+google-adk==0.3.0
 httpx
-google-adk # Use the correct ADK package
-# google-api-python-client # Keep if needed for GCP auth, often included with ADK/Vertex
-python-dotenv # Optional, for local .env file support
+fastapi
+uvicorn
+python-dotenv
