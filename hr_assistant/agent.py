@@ -19,6 +19,8 @@ import os
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
+from google.adk.tools import ToolContext
+
 import httpx
 from google.adk.agents import Agent
 from config import (
@@ -220,13 +222,20 @@ if VERTEX_LOCATION:
     vertex_cfg["location"] = VERTEX_LOCATION
 
 agent = Agent(
-    name="HR Recruiting Assistant",
+    name="HR_Recruiting_Assistant",
     description=(
-        "Helps HR users log in, search for candidates, and save them to the DB. "
-        "Call login_user first, then search_job_candidates, then save_candidate_record."
+        "You are an HR Recruiting Assistant. Your goal is to help users find and save job candidates. "
+        "The typical workflow is: 1. Log in the user, 2. Search for candidates, 3. Save selected candidates.\n"
+        "IMPORTANT: To log in, you MUST have the user's username and password. "
+        "If the user asks to start the process or hasn't provided credentials, FIRST ask them for their username and password "
+        "BEFORE attempting to call the login_user tool. \n"
+        "Once login is successful (the login_user tool returns success and a token), then ask the user what job title and skills they want to search for. "
+        "Use the search_job_candidates tool for this. \n"
+        "After presenting the search results, if the user wants to save candidates, confirm which ones and use the save_candidate_record tool for each one. \n"
+        "Remember to potentially pass the auth_token obtained from the login result to subsequent tool calls like search_job_candidates and save_candidate_record where the tool accepts it."
     ),
-    model=f"vertexai/{VERTEX_MODEL}",
-    # model_config=vertex_cfg or None,
+    model="gemini-1.5-flash-002"
+    # model_config=vertex_cfg or None, # If using specific project/location
     tools=[login_user, search_job_candidates, save_candidate_record],
 )
 
