@@ -110,107 +110,68 @@ async def resolve_url(agent_name: str) -> str:
 # ---------------------------------------------------------------------
 # 2.  Tool functions (LLM will call these)
 # ---------------------------------------------------------------------
-async def login_user(username: str, password: str) -> Dict[str, Any]:
+async def login_user(username: str, password: str, tool_context: ToolContext) -> dict:
     """
-    Authenticates a user via the auth_agent using username and password.
-
-    On success, returns a dictionary containing {'success': true, 'token': 'AUTH_TOKEN'}.
-    On failure, returns a dictionary containing {'success': false, 'error': 'Reason...'}
-    or raises an exception if the call fails completely.
+    Authenticate with the auth_agent microservice.
+    Returns {"status":"success","token":...} or {"status":"error","message":...}
     """
-    logger.info(f"Executing tool: login_user for user: {username}")
-    try:
-        # Assuming make_rpc_call returns the 'result' payload directly
-        result = await make_rpc_call(
-            # agent_url=AUTH_AGENT_URL,
-            agent_url = await resolve_url("auth_agent"),
-            method="login",
-            params={"username": username, "password": password}
-        )
-        # We simply return the result dict from the underlying agent
-        logger.info(f"Login result for {username}: {result}")
-        return result # ADK expects JSON-serializable return (dict is fine)
-    except Exception as e:
-        logger.error(f"Tool 'login_user' failed: {e}")
-        # Return a failure dictionary consistent with expected success structure
-        return {"success": False, "error": f"Login failed: {str(e)}"}  
+    # call the auth_agent.login JSON-RPC method
+    result = await make_rpc_call(
+        agent_url=AUTH_AGENT_URL,
+        method="login",
+        params={"username": username, "password": password}
+    )
 
-async def search_job_candidates(job_title: str, skills: str, auth_token: Optional[str] = None) -> List[Dict[str, Any]]:
+    if result.get("success"):
+        token = result["token"]
+        # store for later tools
+        tool_context.state["auth_token"] = token
+        return {"status": "success", "token": token}
+    else:
+        return {"status": "error", "message": result.get("error", "Login failed")} 
+
+async def search_job_candidates(skill: str, location: str, tool_context: ToolContext) -> dict:
     """
-    Searches for job candidates via the webservice_agent based on job title and comma-separated skills.
-    Optionally accepts an auth_token (currently informational, not strictly used by underlying mock service).
-
-    Returns a list of candidate dictionaries: [{'id':..., 'name':..., 'title':..., 'skills':[], 'experience':...}, ...].
-    Returns an empty list or raises an exception on failure.
+    Query webservice_agent.search_candidates via JSON-RPC.
+    Requires prior login (token in session state).
+    Returns {"status":"success","candidates":[...]} or {"status":"error",...}
     """
-    logger.info(f"Executing tool: search_job_candidates - Title: '{job_title}', Skills: '{skills}'")
-    # Note: auth_token is accepted but not passed to this specific mock service call
-    # The LLM *might* pass the token from login_user's result here if instructed.
-    if auth_token:
-        logger.info("Auth token provided (informational for this tool).")
-    try:
-        # Assuming make_rpc_call returns the 'result' payload directly, which should be a list
-        candidates = await make_rpc_call(
-            # agent_url=WEBSERVICE_AGENT_URL,
-            agent_url = await resolve_url("webservice_agent"),
-            method="search_candidates",
-            params={"title": job_title, "skills": skills}
-        )
-        if isinstance(candidates, list):
-            logger.info(f"Search successful, found {len(candidates)} candidates.")
-            return candidates # Return the list directly
-        else:
-            logger.warning(f"Search returned non-list result: {type(candidates)}. Returning empty list.")
-            return [] # Return empty list on unexpected result type
-    except Exception as e:
-        logger.error(f"Tool 'search_job_candidates' failed: {e}")
-        # In case of failure, return an empty list or re-raise depending on desired behavior
-        # raise # Option 1: Let the agent framework handle the exception
-        return [] # Option 2: Return empty list to indicate no candidates found due to error
+    token = tool_context.state.get("auth_token")
+    if not token:
+        return {"status": "error", "message": "You must log in first."}
 
-async def save_candidate_record(name: str, title: str, skills: List[str], auth_token: Optional[str] = None) -> Dict[str, Any]:
+    # call webservice_agent.search_candidates
+    candidates = await make_rpc_call(
+        agent_url=WEBSERVICE_AGENT_URL,
+        method="search_candidates",
+        params={"title": skill, "skills": skill, "token": token}
+    )
+
+    # `candidates` should be a list if successful
+    if isinstance(candidates, list):
+        return {"status": "success", "candidates": candidates}
+    else:
+        return {"status": "error", "message": "Search failed or returned no results."}
+
+async def save_candidate_record(candidate_id: str, tool_context: ToolContext) -> dict:
     """
-    Saves a single candidate record (name, title, skills list) via the dbservice_agent.
-    Optionally accepts an auth_token (informational).
-
-    Returns a dictionary indicating success or failure, e.g.,
-    {'status': 'saved', 'name': '...', ...} or {'status': 'failed', 'error': '...'}.
-    Raises an exception on complete call failure.
+    Send a JSON-RPC create_record to the dbservice_agent.
+    Returns {"status":"success"} or {"status":"error",...}
     """
-    logger.info(f"Executing tool: save_candidate_record - Name: '{name}', Title: '{title}'")
-    # Note: auth_token is accepted but not passed to this specific mock service call
-    if auth_token:
-        logger.info("Auth token provided (informational for this tool).")
+    token = tool_context.state.get("auth_token")
+    if not token:
+        return {"status": "error", "message": "You must log in first."}
 
-    # Basic validation before calling
-    if not name or not title or not skills:
-         logger.warning("Save candidate called with missing name, title, or skills.")
-         # Return a dict indicating failure, matching potential success structure
-         return {"status": "failed", "error": "Missing required candidate information (name, title, skills list)."}
-    if not isinstance(skills, list):
-         logger.warning(f"Save candidate called with skills not as list: {type(skills)}")
-         return {"status": "failed", "error": "Skills must be provided as a list."}
+    result = await make_rpc_call(
+        agent_url=DBSERVICE_AGENT_URL,
+        method="create_record",
+        params={"id": candidate_id, "token": token}
+    )
 
-    try:
-        # Assuming make_rpc_call returns the 'result' payload directly
-        result = await make_rpc_call(
-            # agent_url=DBSERVICE_AGENT_URL,
-            agent_url = await resolve_url("dbservice_agent"),
-            method="create_record",
-            params={"name": name, "title": title, "skills": skills}
-        )
-        logger.info(f"Save candidate result for {name}: {result}")
-        # Add a status field if the underlying service doesn't explicitly provide one
-        if isinstance(result, dict) and "error" not in result:
-             result.setdefault("status", "saved") # Assume saved if no error reported
-        elif isinstance(result, dict) and "error" in result:
-             result.setdefault("status", "failed")
-
-        return result # Return the result dict
-    except Exception as e:
-        logger.error(f"Tool 'save_candidate_record' failed for {name}: {e}")
-        # Return a failure dictionary
-        return {"status": "failed", "error": f"Save operation failed: {str(e)}"}
+    if result.get("status") == "saved":
+        return {"status": "success", "message": f"Candidate {candidate_id} saved."}
+    else:
+        return {"status": "error", "message": result.get("error", "Save failed.")}
 
 # ---------------------------------------------------------------------
 # 3.  Instantiate the Agent (global variable *agent*)
@@ -234,7 +195,7 @@ agent = Agent(
         "After presenting the search results, if the user wants to save candidates, confirm which ones and use the save_candidate_record tool for each one. \n"
         "Remember to potentially pass the auth_token obtained from the login result to subsequent tool calls like search_job_candidates and save_candidate_record where the tool accepts it."
     ),
-    model="gemini-1.5-flash-002"
+    model="gemini-1.5-flash-002",
     # model_config=vertex_cfg or None, # If using specific project/location
     tools=[login_user, search_job_candidates, save_candidate_record],
 )
