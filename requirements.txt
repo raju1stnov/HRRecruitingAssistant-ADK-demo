@@ -1,5 +1,3 @@
 google-adk==0.3.0
 httpx
-fastapi
-uvicorn
 python-dotenv

@@ -1,54 +1,45 @@
-# main.py
+"""
+HR Recruiting Assistant – ADK implementation
+--------------------------------------------
+An LLM-orchestrated agent that can:
+
+1. login_user(username, password)             -> token
+2. search_job_candidates(job_title, skills)   -> list[dict]
+3. save_candidate_record(name, title, skills) -> status
+
+All three tools call existing JSON-RPC micro-services.  Service
+end-points are resolved dynamically via the a2a_registry if its URL is
+set, otherwise they fall back to the fixed URLs in .env / config.py.
+"""
+from __future__ import annotations
+
+import asyncio
 import logging
-import httpx
-import sys
-from typing import Any, Dict, List, Optional
 import os
 from functools import lru_cache
+from typing import Any, Dict, List, Optional
 
-try:
-    from google.adk.agents import Agent
-    # We might need ToolContext if we want explicit context later
-    # from google.adk.tools import ToolContext
-except ImportError as e:
-    logging.exception("Could not import google.adk.agents.Agent. Please ensure 'google-adk==0.3.0' is installed correctly and supports this structure.")
-    logging.error(f"Import error details: {e}")
-    sys.exit("Exiting: ADK library components not found.")
-
-# Import configuration (Make sure these are loaded *before* Agent instantiation)
+import httpx
+from google.adk.agents import Agent
 from config import (
     AUTH_AGENT_URL,
     WEBSERVICE_AGENT_URL,
     DBSERVICE_AGENT_URL,
+    A2A_REGISTRY_URL,
     VERTEX_MODEL,
-    VERTEX_PROJECT_ID, # Keep these for potential model_config
-    VERTEX_LOCATION,  # Keep these for potential model_config
-    ADK_HOST, # These might be less relevant if using `adk run/web`
-    ADK_PORT  # These might be less relevant if using `adk run/web`
+    VERTEX_PROJECT_ID,
+    VERTEX_LOCATION,
+    ADK_PORT,
+    ADK_HOST
 )
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("hr_assistant.agent")
 
 
-REGISTRY_URL = os.getenv("A2A_REGISTRY_URL", "http://a2a_registry:8000/a2a")
-
-@lru_cache              # caches the lookup per agent name
-async def resolve_url(agent_name: str) -> str:
-    """Ask the a2a_registry for the runtime URL of `agent_name`."""
-    card = await make_rpc_call(
-        agent_url=REGISTRY_URL,
-        method="get_agent",
-        params={"name": agent_name},
-    )
-    if not card or "url" not in card:
-        raise RuntimeError(f"Registry has no URL for {agent_name}")
-    return card["url"]        
-
-# --------------------------------------------------
-# 1) Utility: JSON-RPC helper
-# --------------------------------------------------
+# ---------------------------------------------------------------------
+# 0.  Helper: JSON-RPC 2.0 call
+# ---------------------------------------------------------------------
 async def make_rpc_call(agent_url: str, method: str, params: Dict[str, Any], request_id: int = 1) -> Dict[str, Any]:
     """
     Makes an asynchronous JSON-RPC 2.0 call to a specified agent URL.
@@ -96,9 +87,27 @@ async def make_rpc_call(agent_url: str, method: str, params: Dict[str, Any], req
             else:
                  raise # Re-raise the specific error
 
-# --------------------------------------------------
-# 2) Tool functions (plain functions are now Tools)
-# --------------------------------------------------
+# ---------------------------------------------------------------------
+# 1.  Optional dynamic service discovery via registry
+# ---------------------------------------------------------------------
+REGISTRY_URL = os.getenv("A2A_REGISTRY_URL", "http://a2a_registry:8000/a2a")
+
+@lru_cache              # caches the lookup per agent name
+async def resolve_url(agent_name: str) -> str:
+    """Ask the a2a_registry for the runtime URL of `agent_name`."""
+    card = await make_rpc_call(
+        agent_url=REGISTRY_URL,
+        method="get_agent",
+        params={"name": agent_name},
+    )
+    if not card or "url" not in card:
+        raise RuntimeError(f"Registry has no URL for {agent_name}")
+    return card["url"]    
+
+
+# ---------------------------------------------------------------------
+# 2.  Tool functions (LLM will call these)
+# ---------------------------------------------------------------------
 async def login_user(username: str, password: str) -> Dict[str, Any]:
     """
     Authenticates a user via the auth_agent using username and password.
@@ -122,7 +131,7 @@ async def login_user(username: str, password: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Tool 'login_user' failed: {e}")
         # Return a failure dictionary consistent with expected success structure
-        return {"success": False, "error": f"Login failed: {str(e)}"}          # ADK expects dict / JSON-serialisable
+        return {"success": False, "error": f"Login failed: {str(e)}"}  
 
 async def search_job_candidates(job_title: str, skills: str, auth_token: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -201,36 +210,33 @@ async def save_candidate_record(name: str, title: str, skills: List[str], auth_t
         # Return a failure dictionary
         return {"status": "failed", "error": f"Save operation failed: {str(e)}"}
 
-# --------------------------------------------------
-# 3) Define the Agent (this *is* your “root_agent”)
-# --------------------------------------------------
-logger.info("Defining ADK Agent instance...")
-
-# Prepare optional model configuration
-model_config_params = {}
+# ---------------------------------------------------------------------
+# 3.  Instantiate the Agent (global variable *agent*)
+# ---------------------------------------------------------------------
+vertex_cfg = {}
 if VERTEX_PROJECT_ID:
-    model_config_params['project'] = VERTEX_PROJECT_ID
+    vertex_cfg["project"] = VERTEX_PROJECT_ID
 if VERTEX_LOCATION:
-    model_config_params['location'] = VERTEX_LOCATION
+    vertex_cfg["location"] = VERTEX_LOCATION
 
-# Instantiate the Agent
-root_agent = Agent(
-    name="HR Recruiting Assistant (ADK)",
+agent = Agent(
+    name="HR Recruiting Assistant",
     description=(
-        "An assistant that helps HR users log in, search for job candidates "
-        "using external services based on title and skills, and save candidate records "
-        "to a database. Requires login before searching or saving." # Added guidance
+        "Helps HR users log in, search for candidates, and save them to the DB. "
+        "Call login_user first, then search_job_candidates, then save_candidate_record."
     ),
-    model=f"vertexai/{VERTEX_MODEL}",   
-    tools=[
-        login_user,
-        search_job_candidates,
-        save_candidate_record
-    ],
-    # enable_automatic_function_calling=True # Often default or enabled by Agent class
+    model=f"vertexai/{VERTEX_MODEL}",
+    # model_config=vertex_cfg or None,
+    tools=[login_user, search_job_candidates, save_candidate_record],
 )
 
-logger.info(f"ADK Agent '{root_agent.name}' defined successfully with {len(root_agent.tools)} tools.")
+logger.info("✔ Agent initialised with %d tools", len(agent.tools))
 
-# Add a final info message for clarity when the module is imported/processed by ADK CLI
-logger.info("Agent definition complete. Use 'adk run .' or 'adk web .' to start the agent.")
+# # ---------------------------------------------------------------------
+# # 4.  CLI debug helper
+# # ---------------------------------------------------------------------
+# if __name__ == "__main__":
+#     # Simple REPL to test the tools without the ADK web UI
+#     async def _quick_test():
+#         print(await login_user("admin", "secret"))
+#     asyncio.run(_quick_test())

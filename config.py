@@ -1,50 +1,35 @@
-# config.py
+"""Central, validated configuration – imported by hr_assistant.agent"""
+from pathlib import Path
 import os
-from dotenv import load_dotenv
+import sys
 import logging
-import sys # For exiting on critical config error
+from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Always load the .env that sits next to this file
+load_dotenv(dotenv_path=Path(__file__).with_suffix(".env"))
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-def get_required_env(var_name: str) -> str:
-    """Gets a required environment variable or exits if missing."""
-    value = os.getenv(var_name)
-    if value is None:
-        error_message = f"CRITICAL: Missing required environment variable '{var_name}'. Please set it in your .env file or environment."
-        logger.critical(error_message)
-        sys.exit(error_message) # Exit the program immediately
-    if not isinstance(value, str) or not value.strip():
-         error_message = f"CRITICAL: Environment variable '{var_name}' must be a non-empty string. Found: '{value}'"
-         logger.critical(error_message)
-         sys.exit(error_message) # Exit the program immediately
-    return value
+def req(var: str) -> str:
+    val = os.getenv(var)
+    if not val:
+        log.critical("Missing required env var %s", var)
+        sys.exit(f"Missing required env var: {var}")
+    return val
 
-# --- Agent URLs (Guaranteed to be str and non-empty) ---
-AUTH_AGENT_URL: str = get_required_env("AUTH_AGENT_URL")
-WEBSERVICE_AGENT_URL: str = get_required_env("WEBSERVICE_AGENT_URL")
-DBSERVICE_AGENT_URL: str = get_required_env("DBSERVICE_AGENT_URL")
+# Required URLs
+AUTH_AGENT_URL      : str = req("AUTH_AGENT_URL")
+WEBSERVICE_AGENT_URL: str = req("WEBSERVICE_AGENT_URL")
+DBSERVICE_AGENT_URL : str = req("DBSERVICE_AGENT_URL")
 
-# --- Vertex AI Configuration (Guaranteed to be str and non-empty) ---
-VERTEX_MODEL: str = get_required_env("VERTEX_MODEL")
+# Optional registry
+A2A_REGISTRY_URL    : str | None = os.getenv("A2A_REGISTRY_URL")
 
-# --- Optional Vertex AI Config (Can be None) ---
-VERTEX_PROJECT_ID: str | None = os.getenv("VERTEX_PROJECT_ID")
-VERTEX_LOCATION: str | None = os.getenv("VERTEX_LOCATION")
+# Vertex model (required)
+VERTEX_MODEL        : str = req("VERTEX_MODEL")
 
-# --- Optional ADK Server Config ---
-ADK_HOST: str = os.getenv("ADK_HOST", "127.0.0.1")
-ADK_PORT: int = int(os.getenv("ADK_PORT", "8000"))
-
-# Log loaded config
-logger.info("Configuration loaded successfully.")
-logger.info(f"AUTH_AGENT_URL: {AUTH_AGENT_URL}")
-logger.info(f"WEBSERVICE_AGENT_URL: {WEBSERVICE_AGENT_URL}")
-logger.info(f"DBSERVICE_AGENT_URL: {DBSERVICE_AGENT_URL}")
-logger.info(f"VERTEX_MODEL: {VERTEX_MODEL}")
-if VERTEX_PROJECT_ID:
-    logger.info(f"VERTEX_PROJECT_ID: {VERTEX_PROJECT_ID}")
-if VERTEX_LOCATION:
-    logger.info(f"VERTEX_LOCATION: {VERTEX_LOCATION}")
+# Optional Vertex project / region
+VERTEX_PROJECT_ID   : str | None = os.getenv("VERTEX_PROJECT_ID")
+VERTEX_LOCATION     : str | None = os.getenv("VERTEX_LOCATION")
+ADK_HOST: str= os.getenv("ADK_HOST", "127.0.0.1")
+ADK_PORT: int= int(os.getenv("ADK_PORT", "8007").strip())
